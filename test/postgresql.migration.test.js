@@ -1,20 +1,20 @@
-// Copyright IBM Corp. 2015. All Rights Reserved.
+// Copyright IBM Corp. 2015,2019. All Rights Reserved.
 // Node module: loopback-connector-postgresql
 // This file is licensed under the Artistic License 2.0.
 // License text available at https://opensource.org/licenses/Artistic-2.0
 
 'use strict';
-var should = require('./init.js');
-var assert = require('assert');
-var Schema = require('loopback-datasource-juggler').Schema;
+const should = require('./init.js');
+const assert = require('assert');
+const Schema = require('loopback-datasource-juggler').Schema;
 
-var db;
+let db;
 
 describe('migrations', function() {
   before(setup);
 
   it('should run migration', function(done) {
-    db.automigrate('UserDataWithIndexes', done);
+    db.automigrate(['UserDataWithIndexes', 'OrderData', 'DefaultUuid'], done);
   });
 
   it('UserDataWithIndexes should have correct indexes', function(done) {
@@ -73,14 +73,50 @@ describe('migrations', function() {
       done();
     });
   });
+
+  it('OrderData should have correct prop type uuid with custom generation function', function(done) {
+    checkColumns('OrderData', function(err, cols) {
+      assert.deepEqual(cols, {
+        ordercode:
+        {column_name: 'ordercode',
+          column_default: 'uuid_generate_v1()',
+          data_type: 'uuid'},
+        ordername:
+        {column_name: 'ordername',
+          column_default: null,
+          data_type: 'text'},
+        id:
+        {column_name: 'id',
+          column_default: 'nextval(\'orderdata_id_seq\'::regclass)',
+          data_type: 'integer'},
+      });
+      done();
+    });
+  });
+
+  it('DefaultUuid should have correct id type uuid and default function v4', function(done) {
+    checkColumns('DefaultUuid', function(err, cols) {
+      assert.deepEqual(cols, {
+        defaultcode:
+        {column_name: 'defaultcode',
+          column_default: 'uuid_generate_v4()',
+          data_type: 'uuid'},
+        id:
+        {column_name: 'id',
+          column_default: 'nextval(\'defaultuuid_id_seq\'::regclass)',
+          data_type: 'integer'},
+      });
+      done();
+    });
+  });
 });
 
 function setup(done) {
   require('./init.js');
 
-  db = getSchema();
+  db = global.getSchema();
 
-  var UserDataWithIndexes = db.define('UserDataWithIndexes', {
+  const UserDataWithIndexes = db.define('UserDataWithIndexes', {
     email: {type: String, null: false, index: true},
     name: String,
     bio: Schema.Text,
@@ -118,6 +154,23 @@ function setup(done) {
       },
     },
   });
+  const OrderData = db.define('OrderData', {
+    ordercode: {type: 'String', required: true, generated: true, useDefaultIdType: false,
+      postgresql: {
+        dataType: 'uuid',
+        defaultFn: 'uuid_generate_v1()',
+        extension: 'uuid-ossp',
+      }},
+    ordername: {type: 'String'},
+  });
+
+  const DefaultUuid = db.define('DefaultUuid', {
+    defaultCode: {type: 'String', required: true, generated: true, useDefaultIdType: false,
+      postgresql: {
+        dataType: 'uuid',
+        defaultFn: 'uuid_generate_v1()', // lack extension
+      }},
+  });
 
   done();
 }
@@ -141,7 +194,7 @@ function getIndexes(model, cb) {
     't.relkind=\'r\' AND t.relname=\'' +
     table(model) + '\'',
     function(err, data) {
-      var indexes = {};
+      const indexes = {};
       if (!err) {
         // group data by index name
         data.forEach(function(index) {
@@ -150,7 +203,7 @@ function getIndexes(model, cb) {
         });
       }
       cb(err, indexes);
-    }
+    },
   );
 }
 
@@ -160,4 +213,20 @@ function table(model) {
 
 function query(sql, cb) {
   db.adapter.query(sql, cb);
+}
+
+function checkColumns(table, cb) {
+  const tableName = table.toLowerCase();
+  query('SELECT column_name, column_default, data_type FROM information_schema.columns \
+  WHERE(table_schema, table_name) = (\'public\', \'' + tableName + '\');',
+  function(err, data) {
+    const cols = {};
+    if (!err) {
+      data.forEach(function(index) {
+        cols[index.column_name] = index;
+        delete index.name;
+      });
+    }
+    cb(err, cols);
+  });
 }

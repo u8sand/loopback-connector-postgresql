@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2014,2015. All Rights Reserved.
+// Copyright IBM Corp. 2014,2019. All Rights Reserved.
 // Node module: loopback-connector-postgresql
 // This file is licensed under the Artistic License 2.0.
 // License text available at https://opensource.org/licenses/Artistic-2.0
@@ -7,17 +7,17 @@
 process.env.NODE_ENV = 'test';
 require('should');
 
-var async = require('async');
+const async = require('async');
 
-var db;
+let db;
 
 before(function() {
-  db = getSchema();
+  db = global.getSchema();
 });
 
 describe('Mapping models', function() {
   it('should honor the postgresql settings for table/column', function(done) {
-    var schema =
+    const schema =
       {
         'name': 'TestInventory',
         'options': {
@@ -56,9 +56,9 @@ describe('Mapping models', function() {
           },
         },
       };
-    var models = db.modelBuilder.buildModels(schema);
+    const models = db.modelBuilder.buildModels(schema);
     // console.log(models);
-    var Model = models['TestInventory'];
+    const Model = models['TestInventory'];
     Model.attachTo(db);
 
     db.automigrate(function(err, data) {

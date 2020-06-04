@@ -1,12 +1,13 @@
-// Copyright IBM Corp. 2013,2015. All Rights Reserved.
+// Copyright IBM Corp. 2013,2019. All Rights Reserved.
 // Node module: loopback-connector-postgresql
 // This file is licensed under the Artistic License 2.0.
 // License text available at https://opensource.org/licenses/Artistic-2.0
 
 'use strict';
-var DataSource = require('loopback-datasource-juggler').DataSource;
+const juggler = require('loopback-datasource-juggler');
+let DataSource = juggler.DataSource;
 
-var config = require('rc')('loopback', {test: {postgresql: {}}}).test.postgresql;
+let config = require('rc')('loopback', {test: {postgresql: {}}}).test.postgresql;
 
 process.env.PGHOST = process.env.POSTGRESQL_HOST ||
     process.env.PGHOST ||
@@ -30,24 +31,24 @@ config = {
   password: process.env.PGPASSWORD,
 };
 
-var url = 'postgres://' + (config.username || config.user) + ':' +
+const url = 'postgres://' + (config.username || config.user) + ':' +
   config.password + '@' + (config.host || config.hostname) + ':' +
   config.port + '/' + config.database;
 
 global.getDBConfig = function(useUrl) {
-  var settings = config;
+  let settings = config;
   if (useUrl) {
     settings = {url: url};
-  };
+  }
   return settings;
 };
 
-var db;
+let db;
 global.getDataSource = global.getSchema = function(useUrl) {
   // Return cached data source if possible to avoid too many client error
   // due to multiple instances of connection pools
   if (!useUrl && db) return db;
-  var settings = getDBConfig(useUrl);
+  const settings = global.getDBConfig(useUrl);
   db = new DataSource(require('../'), settings);
   db.log = function(a) {
     // console.log(a);
@@ -55,9 +56,17 @@ global.getDataSource = global.getSchema = function(useUrl) {
   return db;
 };
 
+global.resetDataSourceClass = function(ctor) {
+  DataSource = ctor || juggler.DataSource;
+  const promise = db ? db.disconnect() : Promise.resolve();
+  db = undefined;
+  return promise;
+};
+
 global.connectorCapabilities = {
   ilike: false,
   nilike: false,
+  // TODO: [b-admike] we do not support arrays at the moment
+  // see https://github.com/strongloop/loopback-connector-postgresql/issues/342
+  supportsArrays: false,
 };
-
-global.sinon = require('sinon');

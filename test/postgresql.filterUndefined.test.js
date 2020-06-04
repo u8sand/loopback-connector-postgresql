@@ -1,16 +1,16 @@
-// Copyright IBM Corp. 2015. All Rights Reserved.
+// Copyright IBM Corp. 2015,2019. All Rights Reserved.
 // Node module: loopback-connector-postgresql
 // This file is licensed under the Artistic License 2.0.
 // License text available at https://opensource.org/licenses/Artistic-2.0
 
 'use strict';
-var should = require('should'),
+const should = require('should'),
   assert = require('assert');
-var Post, db;
+let Post, db, Charge, Currency;
 
 describe('filter undefined fields', function() {
   before(function() {
-    db = getDataSource();
+    db = global.getDataSource();
 
     Post = db.define('FilterUndefined', {
       defaultInt: {
@@ -38,7 +38,7 @@ describe('filter undefined fields', function() {
   });
 
   it('should insert only default value', function(done) {
-    var dflPost = new Post();
+    const dflPost = new Post();
     dflPost.save(function(err, p) {
       should.not.exist(err);
       Post.findOne({where: {id: p.id}}, function(err, p) {
@@ -53,7 +53,7 @@ describe('filter undefined fields', function() {
   });
 
   it('should insert default value and \'third\' field', function(done) {
-    var dflPost = new Post();
+    const dflPost = new Post();
     dflPost.third = 3;
     dflPost.save(function(err, p) {
       should.not.exist(err);
@@ -106,7 +106,7 @@ describe('filter undefined fields', function() {
   });
 
   it('should insert a value into \'defaultInt\' and \'second\'', function(done) {
-    var dflPost = new Post();
+    const dflPost = new Post();
     dflPost.second = 2;
     dflPost.defaultInt = 11;
     dflPost.save(function(err, p) {
@@ -116,7 +116,7 @@ describe('filter undefined fields', function() {
         p.defaultInt.should.be.equal(11);
         should.not.exist(p.first);
         should.not.exist(p.third);
-                //should.exist(p.third);
+        // should.exist(p.third);
         p.second.should.be.equal(2);
         done();
       });
@@ -132,6 +132,57 @@ describe('filter undefined fields', function() {
         should.not.exist(p.first);
         should.not.exist(p.second);
         should.not.exist(p.third);
+        done();
+      });
+    });
+  });
+
+  describe('able to handle null foreign keys', function() {
+    before(function(done) {
+      Charge = db.define('Charge', {amount: Number});
+      Currency = db.define('Currency', {code: String, country: String});
+      Charge.belongsTo('Currency', {as: 'currency'});
+      db.automigrate(['Charge', 'Currency'], done);
+    });
+
+    it('able to create entity with null foreign key', function(done) {
+      Currency.create({code: 'USD', country: 'USA'}, function(err, currency) {
+        if (err) return done(err);
+        Charge.create({amount: 10, currencyId: currency.id}, function(err) {
+          if (err) return done(err);
+          Charge.create({amount: 10, currencyId: null}, function(err, charge) {
+            if (err) return done(err);
+            should.not.exist(charge.currencyId);
+            done();
+          });
+        });
+      });
+    });
+
+    it('able to query entities with null foreign key', function(done) {
+      Charge.find({
+        where: {currency: {
+          inq: [null, 1],
+        }},
+        include: {relation: 'currency'},
+      }, function(err, charges) {
+        if (err) return done(err);
+        charges.should.have.lengthOf(2);
+        done();
+      });
+    });
+
+    it('able to filter entities with null id condition', function(done) {
+      Currency.find({
+        where: {
+          id: {
+            inq: [null, 1],
+          },
+        },
+      },
+      function(err, currencies) {
+        if (err) return done(err);
+        currencies.should.have.lengthOf(1);
         done();
       });
     });
